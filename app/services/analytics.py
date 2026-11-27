@@ -89,15 +89,18 @@ def _videos(db: Session, start: date, end: date) -> tuple[dict[str, dict], int, 
                 all_products.add(key)
                 name_text = str(item.get("name") or "").strip() or key
                 product_id = str(item.get("id") or "").strip()
+                image = str(item.get("image") or "").strip()
                 slot = bucket["products"].get(key)
                 if slot is None:
-                    slot = {"id": product_id, "name": name_text, "days": []}
+                    slot = {"id": product_id, "name": name_text, "image": image, "days": []}
                     bucket["products"][key] = slot
                 else:
                     if product_id and not slot["id"]:
                         slot["id"] = product_id
                     if name_text and (not slot["name"] or slot["name"] == slot["id"]):
                         slot["name"] = name_text
+                    if image and not slot["image"]:
+                        slot["image"] = image
                 if day not in slot["days"]:
                     slot["days"].append(day)
         plan_id = str(row.plan_id or "")

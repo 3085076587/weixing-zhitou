@@ -47,10 +47,11 @@ def compact_from_info(info: dict) -> dict:
                 authors.append(author)
             product_id = str(item.get("product_id") or "").strip()
             product_name = str(item.get("finder_wording") or "").strip()
+            image = str(item.get("finder_cover_url") or "").strip()
             key = product_id or product_name
             if key and key not in seen_products:
                 seen_products.add(key)
-                products.append({"id": product_id, "name": product_name or product_id})
+                products.append({"id": product_id, "name": product_name or product_id, "image": image})
     return {
         "authors": authors,
         "products": products,

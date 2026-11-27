@@ -216,7 +216,10 @@
       document.getElementById("product-dialog-list").innerHTML = items.length
         ? items.map((item) => {
             const days = (item.days || []).map((day) => day.slice(5)).join("、");
-            return `<li><div>${esc(item.name || item.id || "未命名商品")}</div><div class="video-sub">${days ? "出现在 " + esc(days) : ""}</div></li>`;
+            const image = /^https?:\/\//i.test(item.image || "")
+              ? `<img class="product-thumb" src="${esc(item.image)}" alt="" referrerpolicy="no-referrer">`
+              : "";
+            return `<li>${image}<div><div>${esc(item.name || item.id || "未命名商品")}</div><div class="video-sub">${days ? "出现在 " + esc(days) : ""}</div></div></li>`;
           }).join("")
         : "<li>库里没有这个投放号的商品名称</li>";
       dialog.hidden = false;

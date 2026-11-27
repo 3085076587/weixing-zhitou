@@ -29,6 +29,56 @@ def _text(value, limit: int) -> str:
     return str(value or "").strip()[:limit]
 
 
+def _add_product(products: list[dict], seen: set[str], product_id, product_name, image) -> None:
+    product_id = _text(product_id, 64)
+    product_name = _text(product_name, 255)
+    image = _text(image, 1000)
+    key = product_id or product_name
+    if not key:
+        return
+    if key in seen:
+        if image:
+            for item in products:
+                if (item["id"] or item["name"]) == key and not item.get("image"):
+                    item["image"] = image
+        return
+    seen.add(key)
+    products.append({"id": product_id, "name": product_name or product_id, "image": image})
+
+
+def _products_from_items(items) -> list[dict]:
+    products: list[dict] = []
+    seen: set[str] = set()
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        _add_product(products, seen, item.get("id"), item.get("name"), item.get("image"))
+    return products
+
+
+def _merge_product_images(existing_json: str, products: list[dict]) -> list[dict]:
+    """新详情没有封面时，保留库里已经写下的封面链接。"""
+    try:
+        old = json.loads(existing_json or "[]")
+    except json.JSONDecodeError:
+        old = []
+    kept: dict[str, str] = {}
+    if isinstance(old, list):
+        for item in old:
+            if not isinstance(item, dict) or not item.get("image"):
+                continue
+            key = str(item.get("name") or "").strip() or str(item.get("id") or "").strip()
+            if key:
+                kept[key] = str(item["image"])
+    for item in products:
+        if item.get("image"):
+            continue
+        key = item["name"] or item["id"]
+        if key in kept:
+            item["image"] = kept[key]
+    return products
+
+
 def _video_detail(plan: dict, info: dict | None) -> dict:
     authors: list[str] = []
     products: list[dict] = []
@@ -44,12 +94,7 @@ def _video_detail(plan: dict, info: dict | None) -> dict:
         for item in info.get("products") or []:
             if not isinstance(item, dict):
                 continue
-            product_id = _text(item.get("id"), 64)
-            product_name = _text(item.get("name"), 255)
-            key = product_id or product_name
-            if key and key not in seen_products:
-                seen_products.add(key)
-                products.append({"id": product_id, "name": product_name or product_id})
+            _add_product(products, seen_products, item.get("id"), item.get("name"), item.get("image"))
         video_count = int(info.get("video_count") or plan.get("material_num") or 0)
         materials = None
     else:
@@ -63,12 +108,13 @@ def _video_detail(plan: dict, info: dict | None) -> dict:
             if author and author not in seen_authors:
                 seen_authors.add(author)
                 authors.append(author)
-            product_id = _text(item.get("product_id"), 64)
-            product_name = _text(item.get("finder_wording"), 255)
-            key = product_id or product_name
-            if key and key not in seen_products:
-                seen_products.add(key)
-                products.append({"id": product_id, "name": product_name or product_id})
+            _add_product(
+                products,
+                seen_products,
+                item.get("product_id"),
+                item.get("finder_wording"),
+                item.get("finder_cover_url"),
+            )
         video_count = len(materials)
     elif not cached:
         video_count = int(plan.get("material_num") or 0)
@@ -79,7 +125,7 @@ def _video_detail(plan: dict, info: dict | None) -> dict:
     if not products:
         wording = _text(plan.get("finder_wording"), 255)
         if wording:
-            products.append({"id": "", "name": wording})
+            _add_product(products, seen_products, "", wording, plan.get("finder_cover_url"))
     title = _text(plan.get("finder_description"), 255)
     if not title and authors:
         title = f"{authors[0]}等{len(authors)}人的{video_count}个视频"
@@ -230,17 +276,14 @@ def write_plan_detail(db: Session, plan_id: str, detail: dict) -> int:
     """一条详情写进这个视频在每一天的数据库记录。"""
     rows = db.query(LaunchVideoPlan).filter(LaunchVideoPlan.plan_id == plan_id).all()
     authors = [str(name).strip() for name in detail.get("authors") or [] if str(name).strip()]
-    products = [
-        {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
-        for item in detail.get("products") or []
-        if isinstance(item, dict) and (item.get("id") or item.get("name"))
-    ]
+    products = _products_from_items(detail.get("products"))
     video_count = int(detail.get("video_count") or 0)
     for row in rows:
         if authors:
             row.authors_json = json.dumps(authors, ensure_ascii=False)
         if products:
-            row.products_json = json.dumps(products, ensure_ascii=False)
+            merged = _merge_product_images(row.products_json, [dict(item) for item in products])
+            row.products_json = json.dumps(merged, ensure_ascii=False)
         if video_count:
             row.video_count = video_count
         row.detail_ready = 1
@@ -260,15 +303,12 @@ def apply_cached_details(db: Session) -> int:
         if not info:
             continue
         authors = [str(name).strip() for name in info.get("authors") or [] if str(name).strip()]
-        products = [
-            {"id": str(item.get("id") or ""), "name": str(item.get("name") or "")}
-            for item in info.get("products") or []
-            if isinstance(item, dict) and (item.get("id") or item.get("name"))
-        ]
+        products = _products_from_items(info.get("products"))
         if authors:
             row.authors_json = json.dumps(authors, ensure_ascii=False)
         if products:
-            row.products_json = json.dumps(products, ensure_ascii=False)
+            merged = _merge_product_images(row.products_json, products)
+            row.products_json = json.dumps(merged, ensure_ascii=False)
         cached_count = int(info.get("video_count") or 0)
         if cached_count:
             row.video_count = cached_count
