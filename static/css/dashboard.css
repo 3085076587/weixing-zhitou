@@ -230,6 +230,12 @@ canvas.bars { width: auto; height: 380px; cursor: pointer; }
 #account-box { margin-top: 14px; }
 #trend-title { margin-top: 16px; }
 .video-list, #video-list { display: flex; flex-direction: column; gap: 10px; }
+.video-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.video-totals article { background: #faf8ff; border: 1px solid #efeaf8; border-radius: 10px; padding: 10px 14px; }
+.video-totals .label { color: var(--text-secondary); font-size: 12px; }
+.video-totals .value { margin-top: 4px; font-size: 18px; font-weight: 650; }
+.sort-btn { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0; }
+.sort-btn.active { color: var(--primary-dark); font-weight: 700; }
 .account-block { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; }
 .account-block summary {
     display: flex;
@@ -272,6 +278,6 @@ canvas.bars { width: auto; height: 380px; cursor: pointer; }
 .detail-row td { white-space: normal; background: #faf8ff; }
 
 @media (max-width: 1100px) {
-    .center-metrics, .split { grid-template-columns: 1fr 1fr; }
+    .center-metrics, .split, .video-totals { grid-template-columns: 1fr 1fr; }
     .sidebar { display: none; }
 }

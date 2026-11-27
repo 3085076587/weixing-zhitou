@@ -202,6 +202,14 @@
     }
 
     let shownVideoRows = [];
+    let videoSortKey = "";
+    let videoSortDir = "desc";
+
+    function sortButton(key, label) {
+      const active = videoSortKey === key ? " active" : "";
+      const mark = videoSortKey === key ? (videoSortDir === "asc" ? " ↑" : " ↓") : "";
+      return `<button type="button" class="sort-btn${active}" data-sort="${key}">${label}${mark}</button>`;
+    }
 
     function productCell(row, index) {
       const count = row.product_count || 0;
@@ -244,8 +252,19 @@
         return;
       }
       summary.textContent = `${data.start} 至 ${data.end}，${rows.length} 个投放号。消耗、GMV、平均ROI是这一整段的，作者和商品已去重，同一个视频不按天重复计。`;
-      shownVideoRows = rows;
-      const body = rows.map((row, index) => {
+      const sorted = rows.slice();
+      if (videoSortKey) {
+        const dir = videoSortDir === "asc" ? 1 : -1;
+        sorted.sort((a, b) => (Number(a[videoSortKey] || 0) - Number(b[videoSortKey] || 0)) * dir);
+      }
+      shownVideoRows = sorted;
+      const totals = sorted.reduce((sum, row) => {
+        sum.cost += Number(row.cost) || 0;
+        sum.orders += Number(row.order_count) || 0;
+        sum.gmv += Number(row.gmv) || 0;
+        return sum;
+      }, { cost: 0, orders: 0, gmv: 0 });
+      const body = sorted.map((row, index) => {
         const authors = (row.authors || []).map((author) => `<span class="chip">${esc(author)}</span>`).join("");
         return `<tr>
           <td>${esc(row.name)}</td>
@@ -258,8 +277,12 @@
           <td>${productCell(row, index)}</td>
         </tr>`;
       }).join("");
-      list.innerHTML = `<div class="table-scroll"><table class="plan-table"><thead><tr>
-        <th>投放号</th><th>消耗</th><th>订单数</th><th>GMV</th><th>平均ROI</th><th>全部作者</th><th>视频数</th><th>商品数</th>
+      list.innerHTML = `<div class="video-totals">
+        <article><div class="label">消耗合计</div><div class="value">${money(totals.cost)}</div></article>
+        <article><div class="label">订单数合计</div><div class="value">${totals.orders.toLocaleString("zh-CN")}</div></article>
+        <article><div class="label">GMV合计</div><div class="value">${money(totals.gmv)}</div></article>
+      </div><div class="table-scroll"><table class="plan-table"><thead><tr>
+        <th>投放号</th><th>${sortButton("cost", "消耗")}</th><th>${sortButton("order_count", "订单数")}</th><th>${sortButton("gmv", "GMV")}</th><th>平均ROI</th><th>全部作者</th><th>视频数</th><th>商品数</th>
       </tr></thead><tbody>${body}</tbody></table></div>`;
     }
 
@@ -526,6 +549,17 @@
       location.replace("/");
     };
     document.getElementById("video-list").addEventListener("click", (event) => {
+      const sortBtn = event.target.closest(".sort-btn");
+      if (sortBtn) {
+        const key = sortBtn.dataset.sort;
+        if (videoSortKey === key) videoSortDir = videoSortDir === "desc" ? "asc" : "desc";
+        else {
+          videoSortKey = key;
+          videoSortDir = "desc";
+        }
+        if (videoData) renderVideos(videoData);
+        return;
+      }
       const button = event.target.closest(".product-link");
       if (!button) return;
       const row = shownVideoRows[Number(button.dataset.index)];
