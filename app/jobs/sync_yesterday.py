@@ -3,7 +3,7 @@
 写入三样：
 - 昨天全部投放号的合计，进 launch_summaries
 - 昨天每个投放号的合计，进 launch_account_stats
-- 昨天每一条被投视频，以及作者、视频数、商品，进 launch_video_plans
+- 昨天每一条被投视频，以及作者、视频数、商品名称、商品 id、封面，进 launch_video_plans
 
 服务器用 crontab 每天 5:00 执行一次：
 

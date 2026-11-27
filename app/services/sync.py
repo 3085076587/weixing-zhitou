@@ -1,10 +1,11 @@
 import json
+import logging
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models.launch import LaunchAccountStat, LaunchSummary, LaunchVideoPlan
-from app.services.client import fetch_account_stats, fetch_plans, fetch_statistics
+from app.services.client import ZhitouError, fetch_account_stats, fetch_plans, fetch_product_catalog, fetch_statistics
 from app.services.detail_cache import read_details
 from app.services.fields import money
 
@@ -56,27 +57,53 @@ def _products_from_items(items) -> list[dict]:
     return products
 
 
-def _merge_product_images(existing_json: str, products: list[dict]) -> list[dict]:
-    """新详情没有封面时，保留库里已经写下的封面链接。"""
+def _merge_saved_products(existing_json: str, products: list[dict]) -> list[dict]:
+    """新详情缺封面或商品 id 时，保留库里已经写下的值。"""
     try:
         old = json.loads(existing_json or "[]")
     except json.JSONDecodeError:
         old = []
-    kept: dict[str, str] = {}
+    images: dict[str, str] = {}
+    ids: dict[str, str] = {}
     if isinstance(old, list):
         for item in old:
-            if not isinstance(item, dict) or not item.get("image"):
+            if not isinstance(item, dict):
                 continue
             key = str(item.get("name") or "").strip() or str(item.get("id") or "").strip()
-            if key:
-                kept[key] = str(item["image"])
+            if not key:
+                continue
+            if item.get("image"):
+                images[key] = str(item["image"])
+            if item.get("id"):
+                ids[key] = str(item["id"])
     for item in products:
-        if item.get("image"):
-            continue
         key = item["name"] or item["id"]
-        if key in kept:
-            item["image"] = kept[key]
+        if not item.get("image") and key in images:
+            item["image"] = images[key]
+        if not item.get("id") and item["name"] in ids:
+            item["id"] = ids[item["name"]]
     return products
+
+
+def apply_catalog_ids(products: list[dict], catalog: dict[str, str]) -> bool:
+    changed = False
+    for item in products:
+        if not isinstance(item, dict) or item.get("id"):
+            continue
+        product_id = catalog.get(str(item.get("name") or "").strip())
+        if not product_id:
+            continue
+        item["id"] = product_id
+        changed = True
+    return changed
+
+
+def _catalog_for(start: date, end: date) -> dict[str, str]:
+    try:
+        return fetch_product_catalog(start, end)
+    except ZhitouError as exc:
+        logging.getLogger("zhitou.sync").warning("商品目录没取到 %s：%s", start.isoformat(), exc)
+        return {}
 
 
 def _video_detail(plan: dict, info: dict | None) -> dict:
@@ -149,12 +176,14 @@ def _save_videos(db: Session, start: date, end: date, plans: list[dict], infos: 
     ).delete(synchronize_session=False)
     seen: set[str] = set()
     saved = 0
+    catalog = _catalog_for(start, end)
     for row in plans:
         plan_id = str(row.get("id") or "").strip()
         if not plan_id or plan_id in seen:
             continue
         seen.add(plan_id)
         detail = _video_detail(row, infos.get(plan_id))
+        apply_catalog_ids(detail["products"], catalog)
         nickname = _text(_plan_account_name(row), 255)
         db.add(
             LaunchVideoPlan(
@@ -282,7 +311,7 @@ def write_plan_detail(db: Session, plan_id: str, detail: dict) -> int:
         if authors:
             row.authors_json = json.dumps(authors, ensure_ascii=False)
         if products:
-            merged = _merge_product_images(row.products_json, [dict(item) for item in products])
+            merged = _merge_saved_products(row.products_json, [dict(item) for item in products])
             row.products_json = json.dumps(merged, ensure_ascii=False)
         if video_count:
             row.video_count = video_count
@@ -307,7 +336,7 @@ def apply_cached_details(db: Session) -> int:
         if authors:
             row.authors_json = json.dumps(authors, ensure_ascii=False)
         if products:
-            merged = _merge_product_images(row.products_json, products)
+            merged = _merge_saved_products(row.products_json, products)
             row.products_json = json.dumps(merged, ensure_ascii=False)
         cached_count = int(info.get("video_count") or 0)
         if cached_count:

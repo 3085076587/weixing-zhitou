@@ -127,6 +127,29 @@ def fetch_account_stats(start: date, end: date) -> list[dict]:
     )
 
 
+def fetch_product_catalog(start: date, end: date) -> dict[str, str]:
+    """这一天的商品名称对应商品 id。计划列表本身不带商品 id。"""
+    start_text, _ = _day_bounds(start)
+    _, end_text = _day_bounds(end)
+    rows = _paged(
+        "/product/lists",
+        {
+            "time_type": 2,
+            "start_time": start_text,
+            "end_time": end_text,
+            "platform_type": "",
+        },
+        100,
+    )
+    catalog: dict[str, str] = {}
+    for row in rows:
+        name = str(row.get("product_name") or "").strip()
+        product_id = str(row.get("product_id") or "").strip()
+        if name and product_id:
+            catalog.setdefault(name, product_id)
+    return catalog
+
+
 def fetch_plans(start: date, end: date) -> list[dict]:
     """按页面上的时间范围拉计划列表。"""
     start_text, _ = _day_bounds(start)
