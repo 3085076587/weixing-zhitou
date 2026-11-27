@@ -61,6 +61,7 @@
             <option value="yesterday">昨天</option>
             <option value="7" selected>7天</option>
             <option value="30">30天</option>
+            <option value="month">本月</option>
             <option value="custom">自定义</option>
           </select>
           <input id="start" type="date" />
@@ -137,6 +138,8 @@
         start.setDate(start.getDate() - 6);
       } else if (preset === "30") {
         start.setDate(start.getDate() - 29);
+      } else if (preset === "month") {
+        start.setDate(1);
       }
       startInput.value = iso(start);
       endInput.value = iso(end);
