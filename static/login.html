@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投放数据登录</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body>
+<div class="login-bg">
+    <div class="decor-circle decor-1"></div>
+    <div class="decor-circle decor-2"></div>
+    <div class="login-card">
+        <div class="brand">
+            <div class="brand-mark">投</div>
+            <h1>投放数据看板</h1>
+            <p>投放号计划</p>
+        </div>
+        <form id="login-form" novalidate>
+            <div class="form-item">
+                <label for="username">账号</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <input type="text" id="username" name="username" placeholder="请输入账号" autocomplete="username" maxlength="50" required>
+                </div>
+                <span class="error-msg" id="username-error"></span>
+            </div>
+            <div class="form-item">
+                <label for="password">密码</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <input type="password" id="password" name="password" placeholder="请输入密码" autocomplete="current-password" maxlength="128" required>
+                    <button type="button" class="toggle-pwd" id="toggle-pwd" title="显示/隐藏密码">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
+                <span class="error-msg" id="password-error"></span>
+            </div>
+            <div class="form-extra">
+                <label class="remember">
+                    <input type="checkbox" id="remember"> 记住账号
+                </label>
+            </div>
+            <button type="submit" class="submit-btn" id="submit-btn">登 录</button>
+        </form>
+    </div>
+</div>
+<div class="toast hidden" id="toast"></div>
+<script>
+    const TOKEN_KEY = "zhitou_token";
+    const NAME_KEY = "zhitou_display_name";
+    const REMEMBER_KEY = "zhitou_remember_username";
+    if (localStorage.getItem(TOKEN_KEY)) location.replace("/dashboard");
+
+    const form = document.getElementById("login-form");
+    const usernameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const usernameError = document.getElementById("username-error");
+    const passwordError = document.getElementById("password-error");
+    const submitBtn = document.getElementById("submit-btn");
+    const rememberBox = document.getElementById("remember");
+    const toast = document.getElementById("toast");
+
+    function showToast(message) {
+        toast.textContent = message;
+        toast.className = "toast error";
+        clearTimeout(showToast._timer);
+        showToast._timer = setTimeout(() => toast.classList.add("hidden"), 3000);
+    }
+
+    function setFieldError(input, errorEl, message) {
+        input.classList.toggle("error", !!message);
+        errorEl.textContent = message || "";
+    }
+
+    const saved = localStorage.getItem(REMEMBER_KEY);
+    if (saved) {
+        usernameInput.value = saved;
+        rememberBox.checked = true;
+    }
+
+    document.getElementById("toggle-pwd").onclick = () => {
+        passwordInput.type = passwordInput.type === "password" ? "text" : "password";
+    };
+
+    form.onsubmit = async (event) => {
+        event.preventDefault();
+        setFieldError(usernameInput, usernameError, "");
+        setFieldError(passwordInput, passwordError, "");
+        const username = usernameInput.value.trim();
+        let ok = true;
+        if (!username) {
+            setFieldError(usernameInput, usernameError, "请输入账号");
+            ok = false;
+        }
+        if (!passwordInput.value) {
+            setFieldError(passwordInput, passwordError, "请输入密码");
+            ok = false;
+        }
+        if (!ok) return;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "登录中";
+        try {
+            const res = await fetch("/api/v1/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password: passwordInput.value }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                let detail = data.detail;
+                if (Array.isArray(detail)) detail = detail[0].msg;
+                throw new Error(detail || "登录失败");
+            }
+            if (rememberBox.checked) localStorage.setItem(REMEMBER_KEY, username);
+            else localStorage.removeItem(REMEMBER_KEY);
+            localStorage.setItem(TOKEN_KEY, data.access_token);
+            localStorage.setItem(NAME_KEY, (data.user && data.user.display_name) || username);
+            location.replace("/dashboard");
+        } catch (error) {
+            showToast(error.message || "登录失败");
+            submitBtn.disabled = false;
+            submitBtn.textContent = "登 录";
+        }
+    };
+</script>
+</body>
+</html>

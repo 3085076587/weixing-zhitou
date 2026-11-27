@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.env
+logs/
+_request.ps1
+_*.json
+_probe.py
+_scan.py
+_peek.py
+_parse_request.py
