@@ -68,7 +68,7 @@
           <input id="end" type="date" />
           <button class="btn btn-primary" id="query" type="button">查询</button>
         </div>
-        <p id="status" class="form-hint">点「查询」会按上面的日期取投放号和汇总。被投视频的作者和商品读 Redis 里定时存好的详情。</p>
+        <p id="status" class="form-hint">页面读数据库里 10 月 1 日到昨天的数据。今天的详情由定时任务写入 Redis，不在这里现拉。</p>
         <div class="center-metrics" id="kpis"></div>
         <h2 id="trend-title">趋势</h2>
         <div class="chart-box"><canvas id="chart"></canvas></div>
@@ -268,12 +268,10 @@
       const total = (data.operators || []).length;
       const products = Number((data.overview && data.overview.product_count) || 0);
       const videos = Number((data.overview && data.overview.video_count) || 0);
-      if (fresh) {
-        setStatus(`${data.start} 至 ${data.end}，刚从投放号计划取回。投放号 ${total} 个，被投视频 ${videos} 个，一共放了 ${products} 个商品`);
-      } else if (!videos && !products && total) {
-        setStatus(`${data.start} 至 ${data.end}，投放号已经有了。作者和商品要等定时任务写入 Redis 后再点「查询」`);
+      if (!total && !Number(data.overview && data.overview.cost)) {
+        setStatus(`${data.start} 至 ${data.end}，库里还没有这段数据`, true);
       } else {
-        setStatus(`${data.start} 至 ${data.end}，这是上次取回的结果。被投视频 ${videos} 个，一共放了 ${products} 个商品`);
+        setStatus(`${data.start} 至 ${data.end}，来自数据库。投放号 ${total} 个，被投视频 ${videos} 个，一共放了 ${products} 个商品`);
       }
     }
 
@@ -456,51 +454,25 @@
       }
     }
 
-    async function pullRange(start, end) {
-      const res = await api("/api/v1/launch/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start, end }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "拉取失败");
-      return data;
-    }
-
-    async function load(fresh) {
+    async function load() {
       busy(true);
-      setStatus(fresh ? "正在从投放号计划拉取，作者和商品读 Redis 里的详情…" : "正在读取上次的结果…");
+      setStatus("正在读取数据库…");
       try {
-        if (!fresh) {
-          const peek = await api(`/api/v1/launch/dashboard?start=${startEl.value}&end=${endEl.value}`);
-          const cached = await peek.json();
-          if (!peek.ok) throw new Error(cached.detail || "读取失败");
-          const empty = !(cached.operators || []).length
-            && !Number(cached.overview && cached.overview.cost)
-            && !Number(cached.overview && cached.overview.use_quota);
-          if (!empty) {
-            render(cached, false);
-            return;
-          }
-          fresh = true;
-          setStatus("这段还没有数据，正在从投放号计划拉取…");
-        }
-        await pullRange(startEl.value, endEl.value);
         const res = await api(`/api/v1/launch/dashboard?start=${startEl.value}&end=${endEl.value}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "读取失败");
-        render(data, true);
+        render(data, false);
       } catch (err) {
         setStatus(err.message || "读取失败", true);
       } finally {
         busy(false);
       }
     }
-    document.getElementById("query").onclick = () => load(true);
+    document.getElementById("query").onclick = () => load();
     rangeEl.onchange = async () => {
       applyRange(rangeEl.value, startEl, endEl);
       if (rangeEl.value === "custom") return;
-      await load(true);
+      await load();
     };
     startEl.onchange = () => { rangeEl.value = "custom"; };
     endEl.onchange = () => { rangeEl.value = "custom"; };
@@ -521,7 +493,7 @@
       _render(data, fresh);
       if (selectedName) chooseAccount(selectedName);
     };
-    load(false);
+    load();
   </script>
 </body>
 </html>

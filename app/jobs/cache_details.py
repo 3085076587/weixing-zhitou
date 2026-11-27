@@ -1,6 +1,6 @@
-"""定时把计划详情一条一条写入 Redis 3 号库。
+"""定时把今天的计划详情一条一条写入 Redis 3 号库。
 
-页面查询只读这份缓存，不再并发打详情接口。
+10 月 1 日到昨天的数据在数据库里，页面只读库。这个任务只缓存今天。
 单独运行：
 
     D:\\fastapi-project\\zhitou\\.venv\\Scripts\\python.exe -m app.jobs.cache_details
@@ -42,14 +42,7 @@ def _fresh(detail: dict | None, interval_minutes: int) -> bool:
 
 def run_once() -> dict:
     settings = get_settings()
-    end = date.today()
-    since = (settings.detail_cache_since or "").strip()
-    if since:
-        start = date.fromisoformat(since)
-    else:
-        start = end - timedelta(days=max(settings.detail_cache_days, 1) - 1)
-    if start > end:
-        start = end
+    start = end = date.today()
     ids: list[str] = []
     seen: set[str] = set()
     cursor = start

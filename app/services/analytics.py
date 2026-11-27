@@ -110,16 +110,20 @@ def _account(row: LaunchAccountStat) -> dict:
 
 
 def build_dashboard(db: Session, start: date, end: date) -> dict:
-    summary = (
-        db.query(LaunchSummary)
-        .filter(LaunchSummary.range_start == start, LaunchSummary.range_end == end)
-        .one_or_none()
-    )
-    account_rows = (
-        db.query(LaunchAccountStat)
-        .filter(LaunchAccountStat.range_start == start, LaunchAccountStat.range_end == end)
-        .all()
-    )
+    # 跨天一律把每一天相加。只有查单独一天时才用那一天自己的记录。
+    summary = None
+    account_rows: list[LaunchAccountStat] = []
+    if start == end:
+        summary = (
+            db.query(LaunchSummary)
+            .filter(LaunchSummary.range_start == start, LaunchSummary.range_end == end)
+            .one_or_none()
+        )
+        account_rows = (
+            db.query(LaunchAccountStat)
+            .filter(LaunchAccountStat.range_start == start, LaunchAccountStat.range_end == end)
+            .all()
+        )
     daily_rows = (
         db.query(LaunchSummary)
         .filter(
@@ -227,15 +231,17 @@ def build_dashboard(db: Session, start: date, end: date) -> dict:
 
 
 def operator_series(db: Session, name: str, start: date, end: date) -> dict:
-    ranged = (
-        db.query(LaunchAccountStat)
-        .filter(
-            LaunchAccountStat.nickname == name,
-            LaunchAccountStat.range_start == start,
-            LaunchAccountStat.range_end == end,
+    ranged = []
+    if start == end:
+        ranged = (
+            db.query(LaunchAccountStat)
+            .filter(
+                LaunchAccountStat.nickname == name,
+                LaunchAccountStat.range_start == start,
+                LaunchAccountStat.range_end == end,
+            )
+            .all()
         )
-        .all()
-    )
     daily = (
         db.query(LaunchAccountStat)
         .filter(

@@ -1,13 +1,13 @@
-"""每天凌晨 3 点把昨天写入数据库。
+"""每天凌晨 5 点把昨天写入数据库。
 
 写入三样：
 - 昨天全部投放号的合计，进 launch_summaries
 - 昨天每个投放号的合计，进 launch_account_stats
 - 昨天每一条被投视频，以及作者、视频数、商品，进 launch_video_plans
 
-单独运行后要一直开着，到点才会写：
+服务器用 crontab 每天 5:00 执行一次：
 
-    D:\\fastapi-project\\zhitou\\.venv\\Scripts\\python.exe -m app.jobs.sync_yesterday
+    python -m app.jobs.sync_yesterday --once
 """
 from __future__ import annotations
 
@@ -18,8 +18,6 @@ from datetime import date, datetime, timedelta
 from app.db.session import SessionLocal
 from app.jobs.cache_details import _pull
 from app.models.launch import LaunchAccountStat, LaunchSummary, LaunchVideoPlan
-from app.services.detail_cache import client as redis_client
-from app.services.detail_cache import save_detail
 from app.services.sync import _save_slice, ensure_video_metric_columns, write_plan_detail
 
 logger = logging.getLogger("zhitou.sync_yesterday")
@@ -27,7 +25,7 @@ logger = logging.getLogger("zhitou.sync_yesterday")
 
 def _next_run(now: datetime | None = None) -> datetime:
     current = now or datetime.now()
-    target = current.replace(hour=3, minute=0, second=0, microsecond=0)
+    target = current.replace(hour=5, minute=0, second=0, microsecond=0)
     if current >= target:
         target += timedelta(days=1)
     return target
@@ -94,7 +92,6 @@ def _fill_details(plan_ids: list[str]) -> tuple[int, int]:
         return 0, 0
     from app.core.config import get_settings
 
-    conn = redis_client()
     db = SessionLocal()
     saved = 0
     missed = 0
@@ -104,10 +101,6 @@ def _fill_details(plan_ids: list[str]) -> tuple[int, int]:
             if detail is None:
                 missed += 1
             else:
-                try:
-                    save_detail(conn, plan_id, detail)
-                except Exception:
-                    logger.warning("计划 %s 已写入数据库，缓存副本没记下", plan_id)
                 write_plan_detail(db, plan_id, detail)
                 saved += 1
                 logger.info("详情 %s/%s，计划 %s", index, len(plan_ids), plan_id)
@@ -127,8 +120,14 @@ def serve() -> None:
         try:
             sync_yesterday()
         except Exception:
-            logger.exception("昨天的数据没写完，明天凌晨 3 点再试")
+            logger.exception("昨天的数据没写完，明天凌晨 5 点再试")
 
 
 if __name__ == "__main__":
-    serve()
+    import sys
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    if "--once" in sys.argv:
+        print(sync_yesterday())
+    else:
+        serve()
