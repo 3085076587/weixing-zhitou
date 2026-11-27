@@ -260,7 +260,14 @@ canvas.bars { width: auto; height: 380px; cursor: pointer; }
 .video-title { font-weight: 650; white-space: normal; max-width: 240px; }
 .video-sub { margin-top: 4px; color: var(--text-secondary); font-size: 12px; }
 .badge { margin-left: 4px; background: var(--primary-light); color: var(--primary-dark); border-radius: 4px; padding: 0 4px; font-size: 11px; }
-.linkish { border: 0; background: none; color: var(--primary); cursor: pointer; padding: 0; }
+.linkish { border: 0; background: none; color: var(--primary); cursor: pointer; padding: 0; font: inherit; }
+.product-dialog { position: fixed; inset: 0; background: rgba(28, 16, 46, 0.45); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 24px; }
+.product-dialog[hidden] { display: none; }
+.product-dialog-card { width: min(520px, 100%); max-height: min(70vh, 640px); overflow: auto; background: #fff; border-radius: 16px; padding: 18px 20px 8px; }
+.product-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.product-dialog-head h3 { margin: 0; font-size: 16px; }
+.product-dialog-card ul { list-style: none; margin: 12px 0 0; padding: 0; }
+.product-dialog-card li { padding: 10px 0; border-top: 1px solid #f3f0f8; }
 .detail-row td { white-space: normal; background: #faf8ff; }
 
 @media (max-width: 1100px) {

@@ -34,7 +34,9 @@ def _cards(row: LaunchSummary | None) -> dict:
 
 
 def _product_key(product: dict) -> str:
-    return str(product.get("id") or product.get("name") or "").strip()
+    name = str(product.get("name") or "").strip()
+    product_id = str(product.get("id") or "").strip()
+    return name or product_id
 
 
 def _videos(db: Session, start: date, end: date) -> tuple[dict[str, dict], int, int]:
@@ -60,7 +62,7 @@ def _videos(db: Session, start: date, end: date) -> tuple[dict[str, dict], int, 
         name = row.sph_nickname or "未命名投放号"
         bucket = grouped.setdefault(
             name,
-            {"authors": [], "seen_authors": set(), "products": set(), "plans": {}},
+            {"authors": [], "seen_authors": set(), "products": {}, "plans": {}},
         )
         try:
             authors = json.loads(row.authors_json or "[]")
@@ -77,13 +79,27 @@ def _videos(db: Session, start: date, end: date) -> tuple[dict[str, dict], int, 
                     bucket["seen_authors"].add(text)
                     bucket["authors"].append(text)
         if isinstance(products, list):
+            day = row.range_start.isoformat()
             for item in products:
                 if not isinstance(item, dict):
                     continue
                 key = _product_key(item)
-                if key:
-                    bucket["products"].add(key)
-                    all_products.add(key)
+                if not key:
+                    continue
+                all_products.add(key)
+                name_text = str(item.get("name") or "").strip() or key
+                product_id = str(item.get("id") or "").strip()
+                slot = bucket["products"].get(key)
+                if slot is None:
+                    slot = {"id": product_id, "name": name_text, "days": []}
+                    bucket["products"][key] = slot
+                else:
+                    if product_id and not slot["id"]:
+                        slot["id"] = product_id
+                    if name_text and (not slot["name"] or slot["name"] == slot["id"]):
+                        slot["name"] = name_text
+                if day not in slot["days"]:
+                    slot["days"].append(day)
         plan_id = str(row.plan_id or "")
         count = int(row.video_count or 0)
         bucket["plans"][plan_id] = max(bucket["plans"].get(plan_id, 0), count)
@@ -93,6 +109,10 @@ def _videos(db: Session, start: date, end: date) -> tuple[dict[str, dict], int, 
             "author_count": len(bucket["authors"]),
             "video_count": sum(bucket["plans"].values()),
             "product_count": len(bucket["products"]),
+            "products": sorted(
+                ({**item, "days": sorted(item["days"])} for item in bucket["products"].values()),
+                key=lambda item: item["name"],
+            ),
         }
         for name, bucket in grouped.items()
     }
@@ -172,6 +192,7 @@ def build_dashboard(db: Session, start: date, end: date) -> dict:
         item["author_count"] = extra.get("author_count", 0)
         item["video_count"] = extra.get("video_count", 0)
         item["product_count"] = extra.get("product_count", 0)
+        item["products"] = extra.get("products", [])
     if summary is None and daily_rows:
         cost = float(sum(row.cost or 0 for row in daily_rows))
         order_amount = float(sum(row.order_amount or 0 for row in daily_rows))
